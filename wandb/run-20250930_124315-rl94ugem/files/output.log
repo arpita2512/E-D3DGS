@@ -1,6 +1,0 @@
-Training progress:  35%|███▍      | 5200/15000 [08:21<14:56, 10.94it/s, Loss=0.0081535, psnr=30.18, point=100968]
-train cameras: [None] [30/09 12:43:16]
-
-[ITER 3000] Saving Gaussians [30/09 12:47:58]
-
-[ITER 5000] Saving Gaussians [30/09 12:51:17]

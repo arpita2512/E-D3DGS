@@ -414,7 +414,7 @@ class CameraInfoAudio(NamedTuple):
     cxr: float
     cyr: float
 
-def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder, duration):
+def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
     
     # get image names
@@ -480,7 +480,7 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder, 
     sys.stdout.write('\n')
     return cam_infos
 
-def readColmapSceneInfoAudio(path, images, duration):
+def readColmapSceneInfoAudio(path, images):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -496,7 +496,7 @@ def readColmapSceneInfoAudio(path, images, duration):
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCamerasAudio(path=path,
         cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics,
-        images_folder=os.path.join(path, reading_dir), duration=duration)
+        images_folder=os.path.join(path, reading_dir))
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
     
     test_cam_infos = []
@@ -505,35 +505,7 @@ def readColmapSceneInfoAudio(path, images, duration):
     for c in cam_infos:
       #train_cam_infos.append(c)
       
-      if "001_" in c.image_name:  # "017_"
-        train_cam_infos.append(c)
-      elif "002_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "003_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "004_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "005_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "006_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "007_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "008_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "009_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "010_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "011_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "012_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "013_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "014_" in c.image_name:
-        train_cam_infos.append(c)
-      elif "015_" in c.image_name:
+      if c.image_name.startswith(("001", "002","003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015")): 
         train_cam_infos.append(c)
       else:
         test_cam_infos.append(c)

@@ -42,7 +42,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
 
     gaussians.training_setup(opt)
     
-    wandb.init(project="ed3dgs_mead_align", name="dxdo_fifteen5", notes="no pruning if n_gaussians less than 10k, net width 64")#, mode="offline")
+    wandb.init(project="ed3dgs_mead_align", name="do_fifteen_lowOpaLoss", notes="net width 64")#, mode="offline")
     
     wandb.watch(gaussians._deformation, log="all")
     
@@ -70,11 +70,11 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
 
     num_traincams = 1
     if dataset.loader not in ['nerfies', 'colmap', 'colmapAudio']: # for multi-view setting
-        num_traincams = int(len(train_cams) / scene.maxtime)
+        num_traincams = int(len(train_cams) / len(train_cams))
     
         camera_centers = []
         for i in range(num_traincams):
-            camera_centers.append(train_cams[i*scene.maxtime].camera_center.cpu().numpy())
+            camera_centers.append(train_cams[i*len(train_cams)].camera_center.cpu().numpy())
         camera_centers = np.array(camera_centers)
         cam_dists = calculate_distances(camera_centers)
         sorted_dists = np.unique(cam_dists)
@@ -85,9 +85,9 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     cam_no_list = list(set(c.cam_no for c in train_cams))
     print("train cameras:", cam_no_list)
     if dataset.loader in ['nerfies', 'colmap', 'colmapAudio']:  # single-view
-        loss_list = np.zeros([num_traincams, scene.maxtime]) + 100  # pick frames that have not yet been sampled
+        loss_list = np.zeros([num_traincams, len(train_cams)]) + 100  # pick frames that have not yet been sampled
     else:  # n3v, technicolor, etc.
-        loss_list = np.zeros([max(cam_no_list) + 1, scene.maxtime])
+        loss_list = np.zeros([max(cam_no_list) + 1, len(train_cams)])
         for c in cam_no_list:
             loss_list[c] = 100
 
@@ -116,8 +116,8 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         ### Instead of the complex process below, simply training on random frames will also work well. If you follow this, comment out the `train_cams` sorting process above.
         if dataset.loader in ['nerfies', 'colmap', 'colmapAudio']:
             frame_set = np.random.choice(range(math.ceil(len(viewpoint_stack) / 2)), size=max(opt.batch_size // 2, 1))
-            viewpoint_cams = [viewpoint_stack[(f*2) % scene.maxtime] for f in frame_set] + \
-                             [viewpoint_stack[(f*2+1) % scene.maxtime] for f in frame_set]
+            viewpoint_cams = [viewpoint_stack[(f*2) % len(train_cams)] for f in frame_set] + \
+                             [viewpoint_stack[(f*2+1) % len(train_cams)] for f in frame_set]
         else:
             # Pick camera
             method = "random" if iteration < opt.random_until or iteration % 2 == 1 else "by_error"
@@ -128,7 +128,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                 cam_no.append(last_camera_index)
             
             viewpoint_cams, sampled_cam_no, sampled_frame_no = image_sampler(method=method, loader=viewpoint_stack, loss_list=loss_list, batch_size=opt.batch_size, \
-                cam_no=cam_no, frame_no=sampled_frame_no, total_num_frames=scene.maxtime)
+                cam_no=cam_no, frame_no=sampled_frame_no, total_num_frames=len(train_cams))
             if iteration >= opt.random_until and opt.num_multiview_ssim > 0 and iteration % 50 < opt.num_multiview_ssim:
                 sampled_frame_no = sampled_frame_no  # reuse sampled frame (num_multiview_ssim) times
             else:
@@ -322,7 +322,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     
                     gaussians.densify(densify_threshold, opacity_threshold, scene.cameras_extent, size_threshold)
-                if iteration > opt.pruning_from_iter and iteration % opt.pruning_interval == 0 and gaussians._xyz.shape[0] > 15000:
+                if iteration > opt.pruning_from_iter and iteration % opt.pruning_interval == 0: # and gaussians._xyz.shape[0] > 15000:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
 
                     gaussians.prune(densify_threshold, opacity_threshold, scene.cameras_extent, size_threshold)
@@ -347,7 +347,7 @@ def training(dataset, hyper, opt, pipe, testing_iterations, saving_iterations, c
     gaussians = GaussianModel(dataset.sh_degree, hyper)
     dataset.model_path = args.model_path
     timer = Timer()
-    scene = Scene(dataset, gaussians, shuffle=dataset.shuffle, loader=dataset.loader, duration=hyper.total_num_frames, opt=opt)
+    scene = Scene(dataset, gaussians, shuffle=dataset.shuffle, loader=dataset.loader, duration=None, opt=opt)
     
     print("audio load success!")
     timer.start()

@@ -18,7 +18,7 @@ ModelHiddenParams = dict(
     use_coarse_temporal_embedding = True,
     zero_temporal = False,
     use_anneal = False,
-    total_num_frames = 1690, #4270, #4330, #465, #171, 
+    total_num_frames = None, #1690, #4270, #4330, #465, #171, 
 )
 
 # 465 is n_frames for first 5 vids, 4330 is for all frames, 171 is for vid 17 (single video)
@@ -27,8 +27,8 @@ ModelHiddenParams = dict(
 OptimizationParams = dict(
     dataloader = True,
     batch_size = 1,
-    maxtime = 1690, #4270, #4330, #465, #171,
-    iterations = 15_000,
+    maxtime = None, #1690, #4270, #4330, #465, #171,
+    iterations = 30_000,
 
     lambda_dssim = 0.2,
     num_multiview_ssim = 0,
@@ -40,9 +40,8 @@ OptimizationParams = dict(
     #pruning_from_iter = 600_000,    
     #pruning_interval  = 1000,
     
-    opacity_l1_coef_fine = 0.001,
-    #densify_until_iter = 3000,
-    #pruning_from_iter = 500_000,
+    opacity_l1_coef_fine = 0.00001,
+    densify_until_iter = 30_000,
     
     #deformation_lr_init = 0.00016,
     #deformation_lr_final = 0.000016,

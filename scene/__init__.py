@@ -51,7 +51,7 @@ class Scene:
         elif loader == "colmap":
             scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, duration)
         elif loader == "colmapAudio":
-            scene_info = sceneLoadTypeCallbacks["ColmapAudio"](args.source_path, args.images, duration)
+            scene_info = sceneLoadTypeCallbacks["ColmapAudio"](args.source_path, args.images)
         elif loader == "technicolor" or loader == "technicolorvalid" :
             scene_info = sceneLoadTypeCallbacks["Technicolor"](args.source_path, args.images, args.eval, duration=50, testonly=testonly)
         elif loader == "nerfies":
@@ -142,7 +142,7 @@ class Scene:
                                                     "iteration_" + str(self.loaded_iter),
                                                    ))
         else:
-            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent, self.maxtime)
+            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
 
     def save(self, iteration):

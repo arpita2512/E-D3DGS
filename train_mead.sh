@@ -4,7 +4,7 @@
 #SBATCH --nodes=1
 
 # set max wallclock time
-#SBATCH --time=00:30:00
+#SBATCH --time=01:00:00
 
 # set name of job
 #SBATCH --job-name=ed3dgs
@@ -26,7 +26,7 @@
 
 # TRAIN CMD
 
-python train.py -s "/mnt/scratch/scasag/aligned_input/" --configs "/users/scasag/E-D3DGS/arguments/mead/default.py" --model_path "/mnt/scratch/scasag/align_op_fifteen/" --expname "mead" #-r 2
+python train.py -s "/mnt/scratch/scasag/aligned_input/" --configs "/users/scasag/E-D3DGS/arguments/mead/default.py" --model_path "/mnt/scratch/scasag/align_op_fifteen2/" --expname "mead" #-r 2
 
 # RENDER CMD
 
