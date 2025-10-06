@@ -1,0 +1,6 @@
+{"time":"2025-09-30T12:43:15.711344801+01:00","level":"INFO","msg":"stream: starting","core version":"0.21.0"}
+{"time":"2025-09-30T12:43:16.234586022+01:00","level":"INFO","msg":"stream: created new stream","id":"rl94ugem"}
+{"time":"2025-09-30T12:43:16.234607082+01:00","level":"INFO","msg":"stream: started","id":"rl94ugem"}
+{"time":"2025-09-30T12:43:16.235554313+01:00","level":"INFO","msg":"handler: started","stream_id":"rl94ugem"}
+{"time":"2025-09-30T12:43:16.235567793+01:00","level":"INFO","msg":"writer: Do: started","stream_id":"rl94ugem"}
+{"time":"2025-09-30T12:43:16.235738833+01:00","level":"INFO","msg":"sender: started","stream_id":"rl94ugem"}

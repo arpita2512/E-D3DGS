@@ -70,14 +70,18 @@ class deform_network(nn.Module):
         return int(init_val + (final_val - init_val) * min(max(t, 0), until) / until)
     
     def query_time(self, pts, scales, rotations, time_emb, pc=None, embeddings=None, sh_coef=None, iter=None, feature_out=None, use_coarse_temporal_embedding=False, num_down_emb=30):
-        t = time_emb[:,:1]
+        #t = time_emb[:,:1]
+        t = time_emb[:,:1707]
         if use_coarse_temporal_embedding:
-            h = self.get_temporal_embed(t, num_down_emb)
+            #h = self.get_temporal_embed(t, num_down_emb)
+            h = t
         else:
             if self.args.no_c2f_temporal_embedding:
-                h = self.get_temporal_embed(t, self.max_embeddings)
+                #h = self.get_temporal_embed(t, self.max_embeddings)
+                h = t
             else:
-                h = self.get_temporal_embed(t, self.int_lininterp(iter, num_down_emb, self.max_embeddings, self.c2f_temporal_iter))
+                #h = self.get_temporal_embed(t, self.int_lininterp(iter, num_down_emb, self.max_embeddings, self.c2f_temporal_iter))
+                h = t
     
         if type(pc) == type(None):
             h = torch.cat([h, embeddings], dim=-1)
@@ -114,7 +118,7 @@ class deform_network(nn.Module):
             offset[torch.isnan(offset)] = 0
         else:
             offset = self.offsets[cam_no]
-        time_emb += offset
+        #time_emb += offset
 
         use_anneal = self.args.use_anneal
         coef = 1 if not use_anneal else np.clip(iter/1000,0,1) 

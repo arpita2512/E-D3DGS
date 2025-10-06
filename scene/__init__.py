@@ -17,7 +17,7 @@ from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from PIL import Image 
-from utils.camera_utils import camera_to_JSON, cameraList_from_camInfosv2, cameraList_from_camInfosHyper
+from utils.camera_utils import camera_to_JSON, cameraList_from_camInfosv2, cameraList_from_camInfosHyper, cameraList_from_camInfos
 from utils.graphics_utils import recordpointshelper
 import torch 
 
@@ -48,6 +48,10 @@ class Scene:
 
         if loader == "dynerf":
             scene_info = sceneLoadTypeCallbacks["Dynerf"](args.source_path, args.source_path, args.eval, duration=300)
+        elif loader == "colmap":
+            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, duration)
+        elif loader == "colmapAudio":
+            scene_info = sceneLoadTypeCallbacks["ColmapAudio"](args.source_path, args.images, duration)
         elif loader == "technicolor" or loader == "technicolorvalid" :
             scene_info = sceneLoadTypeCallbacks["Technicolor"](args.source_path, args.images, args.eval, duration=50, testonly=testonly)
         elif loader == "nerfies":
@@ -82,6 +86,10 @@ class Scene:
                 self.train_cameras[resolution_scale] = [] # no training data
             elif loader in ["nerfies"]:
                 self.train_cameras[resolution_scale] = cameraList_from_camInfosHyper(scene_info.train_cameras, resolution_scale, args)
+            elif loader == "colmap":
+                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
+            elif loader == "colmapAudio":
+                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             else: 
                 self.train_cameras[resolution_scale] = cameraList_from_camInfosv2(scene_info.train_cameras, resolution_scale, args)
             
@@ -89,17 +97,25 @@ class Scene:
             print("Loading Test Cameras")
             if loader  in ["technicolorvalid", "technicolor", "dynerf", "dynerfvalid"]: # we need gt for metrics
                 self.test_cameras[resolution_scale] = cameraList_from_camInfosv2(scene_info.test_cameras, resolution_scale, args)
+            elif loader == "colmap":
+                self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+            elif loader == "colmapAudio":
+                self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
             elif loader in ["nerfies"]:
                 self.test_cameras[resolution_scale] = cameraList_from_camInfosHyper(scene_info.test_cameras, resolution_scale, args)
 
             print("Loading Video Cameras")
             if loader  in ["technicolorvalid", "technicolor", "dynerf", "dynerfvalid"]: # we need gt for metrics
                 self.video_cameras[resolution_scale] = cameraList_from_camInfosv2(scene_info.video_cameras, resolution_scale, args)
+            elif loader == "colmap":
+                self.video_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.video_cameras, resolution_scale, args)
+            elif loader == "colmapAudio":
+                self.video_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.video_cameras, resolution_scale, args)
             elif loader in ["nerfies"]:
                 self.video_cameras[resolution_scale] = cameraList_from_camInfosHyper(scene_info.video_cameras, resolution_scale, args)
 
 
-        if loader not in ["nerfies", "dynerf"]:
+        if loader not in ["nerfies", "dynerf", "colmap", "colmapAudio"]:
             for cam in self.test_cameras[resolution_scale]:
                 if cam.image_name[:4] not in raydict and cam.rayo is not None:
                     raydict[cam.image_name[:4]] = torch.cat([cam.rayo, cam.rayd], dim=1).cuda() # 1 x 6 x H x W

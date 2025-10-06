@@ -55,12 +55,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         time2 = time()
         total_time += (time2 - time1)
         render_images.append(to8b(rendering).transpose(1,2,0))
-        torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(count) + ".png"))
+        torchvision.utils.save_image(rendering, os.path.join(render_path, view.image_name))
         # render_list.append(rendering)
     
-        if name in ["train", "test"]:
-            gt = view.original_image[0:3, :, :]
-            torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(count) + ".png"))
+        #if name in ["train", "test"]:
+        #    gt = view.original_image[0:3, :, :]
+        #    torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(count) + ".png"))
             # gt_list.append(gt)
         count +=1
         
@@ -79,7 +79,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     #         torchvision.utils.save_image(image, os.path.join(render_path, '{0:05d}'.format(count) + ".png"))
     #         count +=1
     
-    imageio.mimwrite(os.path.join(model_path, name, "ours_{}".format(iteration), 'video_rgb.mp4'), render_images, fps=30, quality=8)
+    #imageio.mimwrite(os.path.join(model_path, name, "ours_{}".format(iteration), 'video_rgb.mp4'), render_images, fps=30, quality=8)
 
 
 def render_sets(dataset : ModelParams, hyperparam, opt, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, skip_video: bool):
@@ -96,6 +96,8 @@ def render_sets(dataset : ModelParams, hyperparam, opt, iteration : int, pipelin
             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, hyperparam=hyperparam)
         if not skip_video:
             render_set(dataset.model_path, "video", scene.loaded_iter, scene.getVideoCameras(), gaussians, pipeline, background, hyperparam=hyperparam)
+        
+        
 
 
 if __name__ == "__main__":
@@ -117,9 +119,9 @@ if __name__ == "__main__":
     args = get_combined_args(parser)
     print("Rendering " , args.model_path)
     if args.configs:
-        import mmcv
+        import mmengine
         from utils.params_utils import merge_hparams
-        config = mmcv.Config.fromfile(args.configs)
+        config = mmengine.Config.fromfile(args.configs)
         args = merge_hparams(args, config)
     # Initialize system state (RNG)
     safe_state(args.quiet)

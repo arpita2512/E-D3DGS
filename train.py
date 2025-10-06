@@ -27,6 +27,8 @@ from arguments import ModelParams, PipelineParams, OptimizationParams, ModelHidd
 from utils.timer import Timer
 from utils.extra_utils import o3d_knn, weighted_l2_loss_v2, image_sampler, calculate_distances, sample_camera
 
+import wandb
+
 # import lpips
 from utils.scene_utils import render_training_image
 from time import time
@@ -39,6 +41,11 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     first_iter = 0
 
     gaussians.training_setup(opt)
+    
+    wandb.init(project="ed3dgs_mead_align", name="dxdo_fifteen5", notes="no pruning if n_gaussians less than 10k, net width 64")#, mode="offline")
+    
+    wandb.watch(gaussians._deformation, log="all")
+    
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
@@ -62,7 +69,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     video_cams = None
 
     num_traincams = 1
-    if dataset.loader != 'nerfies': # for multi-view setting
+    if dataset.loader not in ['nerfies', 'colmap', 'colmapAudio']: # for multi-view setting
         num_traincams = int(len(train_cams) / scene.maxtime)
     
         camera_centers = []
@@ -77,7 +84,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     
     cam_no_list = list(set(c.cam_no for c in train_cams))
     print("train cameras:", cam_no_list)
-    if dataset.loader in ['nerfies']:  # single-view
+    if dataset.loader in ['nerfies', 'colmap', 'colmapAudio']:  # single-view
         loss_list = np.zeros([num_traincams, scene.maxtime]) + 100  # pick frames that have not yet been sampled
     else:  # n3v, technicolor, etc.
         loss_list = np.zeros([max(cam_no_list) + 1, scene.maxtime])
@@ -89,7 +96,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     prev_num_pts = 0
 
     # We sort training images to sample image of the desired camera number and frame.
-    if dataset.loader not in ['nerfies']:
+    if dataset.loader not in ['nerfies', 'colmap', 'colmapAudio']:
         train_cams = sorted(train_cams, key=lambda x: (x.cam_no, x.frame_no))
 
     viewpoint_stack = train_cams
@@ -107,7 +114,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
 
         # opt.batch_size = 2
         ### Instead of the complex process below, simply training on random frames will also work well. If you follow this, comment out the `train_cams` sorting process above.
-        if dataset.loader == 'nerfies':
+        if dataset.loader in ['nerfies', 'colmap', 'colmapAudio']:
             frame_set = np.random.choice(range(math.ceil(len(viewpoint_stack) / 2)), size=max(opt.batch_size // 2, 1))
             viewpoint_cams = [viewpoint_stack[(f*2) % scene.maxtime] for f in frame_set] + \
                              [viewpoint_stack[(f*2+1) % scene.maxtime] for f in frame_set]
@@ -168,16 +175,30 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             ssim_value, ssim_map = ssim(image_tensor, gt_image_tensor)
             Lssim = (1 - ssim_value) / 2
             loss = Ll1 + opt.lambda_dssim * Lssim
+            wandb.log({
+              'loss_l1': Ll1,
+              'loss_dssim': opt.lambda_dssim * Lssim,
+            })
         else:
             loss = Ll1
+            wandb.log({
+              'loss_l1': Ll1,
+            })
 
         psnr_ = psnr(image_tensor, gt_image_tensor).mean().double()
         for i in range(len(Ll1_items)):
+            #print("\n\nloss list", loss_list)
+            #print("\n\ncam_no_list", cam_no_list)
+            #print("\n\nframe_no_list", frame_no_list)
+            #print("\n\nLl1_items", Ll1_items)
             loss_list[cam_no_list[i], frame_no_list[i]] = Ll1_items[i].item()
 
         # use l1 instead of opacity reset
-        if opt.opacity_l1_coef_fine > 0.:
+        if opt.opacity_l1_coef_fine > 0. : # and iteration < opt.densify_until_iter:
             loss += opt.opacity_l1_coef_fine * torch.sigmoid(gaussians._opacity.mean())
+            wandb.log({
+              'loss_opa_l1': opt.opacity_l1_coef_fine * torch.sigmoid(gaussians._opacity.mean()),   
+            })
 
         # embedding reg using knn (https://github.com/JonathonLuiten/Dynamic3DGaussians)
         if prev_num_pts != gaussians._xyz.shape[0]:
@@ -190,6 +211,9 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         emb = gaussians._embedding[:,None,:].repeat(1,20,1)
         emb_knn = gaussians._embedding[neighbor_indices]
         loss += opt.reg_coef * weighted_l2_loss_v2(emb, emb_knn, neighbor_weight)
+        wandb.log({
+            'loss_emb_reg_knn': opt.reg_coef * weighted_l2_loss_v2(emb, emb_knn, neighbor_weight),
+        })
 
         # smoothness reg on temporal embeddings
         if opt.coef_tv_temporal_embedding > 0:
@@ -198,9 +222,51 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             first_difference = weights[1:,:] - weights[N-1,:]
             second_difference = first_difference[1:,:] - first_difference[N-2,:]
             loss += opt.coef_tv_temporal_embedding * torch.square(second_difference).mean()
+            wandb.log({
+                'loss_smooth_reg_temporal': opt.coef_tv_temporal_embedding * torch.square(second_difference).mean(),
+            })
 
+        wandb.log({
+            'loss_total': loss,
+            'iter': iteration,
+            'psnr': psnr_,
+            'n_gaussians': gaussians._xyz.shape[0],
+        })
         
         loss.backward()
+        
+        '''
+        wandb.log({
+            'g_params/xyz_min': gaussians._xyz.min().item(),
+            'g_params/xyz_max': gaussians._xyz.max().item(),
+            'g_params/xyz_avg': gaussians._xyz.mean().item(),
+            
+            'g_params/sca_min': gaussians._scaling.min().item(),
+            'g_params/sca_max': gaussians._scaling.max().item(),
+            'g_params/sca_avg': gaussians._scaling.mean().item(),
+            
+            'g_params/rot_min': gaussians._rotation.min().item(),
+            'g_params/rot_max': gaussians._rotation.max().item(),
+            'g_params/rot_avg': gaussians._rotation.mean().item(),
+            
+            'g_params/opa_min': gaussians._opacity.min().item(),
+            'g_params/opa_max': gaussians._opacity.max().item(),
+            'g_params/opa_avg': gaussians._opacity.mean().item(),
+            
+            'g_params/emb_min': gaussians._embedding.min().item(),
+            'g_params/emb_max': gaussians._embedding.max().item(),
+            'g_params/emb_avg': gaussians._embedding.mean().item(),
+            
+            'g_params/fdc_min': gaussians._features_dc.min().item(),
+            'g_params/fdc_max': gaussians._features_dc.max().item(),
+            'g_params/fdc_avg': gaussians._features_dc.mean().item(),
+            
+            'g_params/fr_min': gaussians._features_rest.min().item(),
+            'g_params/fr_max': gaussians._features_rest.max().item(),
+            'g_params/fr_avg': gaussians._features_rest.mean().item(),
+        })
+        '''
+        
         viewspace_point_tensor_grad = torch.zeros_like(viewspace_point_tensor)
         for idx in range(0, len(viewspace_point_tensor_list)):
             viewspace_point_tensor_grad = viewspace_point_tensor_grad + viewspace_point_tensor_list[idx].grad
@@ -252,11 +318,11 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                 opacity_threshold = opt.opacity_threshold_fine_init - iteration*(opt.opacity_threshold_fine_init - opt.opacity_threshold_fine_after)/(opt.densify_until_iter)  
                 densify_threshold = opt.densify_grad_threshold_fine_init - iteration*(opt.densify_grad_threshold_fine_init - opt.densify_grad_threshold_after)/(opt.densify_until_iter )  
 
-                if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0 :
+                if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0: # and gaussians._xyz.shape[0] < 50000 and gaussians._xyz.shape[0] > 10000:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
                     
                     gaussians.densify(densify_threshold, opacity_threshold, scene.cameras_extent, size_threshold)
-                if iteration > opt.pruning_from_iter and iteration % opt.pruning_interval == 0:
+                if iteration > opt.pruning_from_iter and iteration % opt.pruning_interval == 0 and gaussians._xyz.shape[0] > 15000:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
 
                     gaussians.prune(densify_threshold, opacity_threshold, scene.cameras_extent, size_threshold)
@@ -268,6 +334,8 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             if iteration < opt.iterations:
                 gaussians.optimizer.step()
                 gaussians.optimizer.zero_grad(set_to_none = True)
+                # empty cache
+                torch.cuda.empty_cache()
 
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
@@ -280,6 +348,8 @@ def training(dataset, hyper, opt, pipe, testing_iterations, saving_iterations, c
     dataset.model_path = args.model_path
     timer = Timer()
     scene = Scene(dataset, gaussians, shuffle=dataset.shuffle, loader=dataset.loader, duration=hyper.total_num_frames, opt=opt)
+    
+    print("audio load success!")
     timer.start()
     
     start_time = time()
@@ -292,6 +362,7 @@ def training(dataset, hyper, opt, pipe, testing_iterations, saving_iterations, c
     hours, remainder = divmod(total_time_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     print(f"training time: {int(hours)}h {int(minutes)}m {seconds}sec")
+    
 
 
 def prepare_output_and_logger(expname):    
@@ -340,9 +411,9 @@ if __name__ == "__main__":
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     if args.configs:
-        import mmcv
+        import mmengine
         from utils.params_utils import merge_hparams
-        config = mmcv.Config.fromfile(args.configs)
+        config = mmengine.Config.fromfile(args.configs)
         args = merge_hparams(args, config)
     print("Optimizing " + args.model_path)
 

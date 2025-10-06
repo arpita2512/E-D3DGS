@@ -1,0 +1,86 @@
+{
+  "os":  "Linux-5.14.0-427.33.1.el9_4.x86_64-x86_64-with-glibc2.34",
+  "python":  "CPython 3.10.16",
+  "startedAt":  "2025-09-30T11:43:15.279196Z",
+  "args":  [
+    "-s",
+    "/mnt/scratch/scasag/aligned_input/",
+    "--configs",
+    "/users/scasag/E-D3DGS/arguments/mead/default.py",
+    "--model_path",
+    "/mnt/scratch/scasag/align_op_crop_fifteen/",
+    "--expname",
+    "mead"
+  ],
+  "program":  "/users/scasag/E-D3DGS/train.py",
+  "codePath":  "train.py",
+  "codePathLocal":  "train.py",
+  "git":  {
+    "remote":  "https://github.com/JeongminB/E-D3DGS.git",
+    "commit":  "a68543ed76e6627df2b8ec07a450c4632eb86f94"
+  },
+  "email":  "saggar.arpita@gmail.com",
+  "root":  "/users/scasag/E-D3DGS",
+  "host":  "gpu019.aire.lee.alces.network",
+  "executable":  "/users/scasag/.conda/envs/ed3dgs/bin/python",
+  "cpu_count":  24,
+  "cpu_count_logical":  24,
+  "gpu":  "NVIDIA L40S",
+  "gpu_count":  1,
+  "disk":  {
+    "/":  {
+      "total":  "16729894912",
+      "used":  "7293358080"
+    }
+  },
+  "memory":  {
+    "total":  "269341769728"
+  },
+  "gpu_nvidia":  [
+    {
+      "name":  "NVIDIA L40S",
+      "memoryTotal":  "48305799168",
+      "cudaCores":  18176,
+      "architecture":  "Ada",
+      "uuid":  "GPU-5687e1d6-788e-6e9b-b509-aa05f174687d"
+    }
+  ],
+  "cudaVersion":  "12.6",
+  "slurm":  {
+    "cluster_name":  "aire.lee.alces.network",
+    "conf":  "/etc/slurm/slurm.conf",
+    "cpus_on_node":  "1",
+    "gpus_on_node":  "1",
+    "gtids":  "0",
+    "job_account":  "default",
+    "job_cpus_per_node":  "1",
+    "job_end_time":  "1759234285",
+    "job_gid":  "558400003",
+    "job_gpus":  "0",
+    "job_id":  "1811667",
+    "job_name":  "ed3dgs",
+    "job_nodelist":  "gpu019",
+    "job_num_nodes":  "1",
+    "job_partition":  "gpu",
+    "job_qos":  "normal",
+    "job_start_time":  "1759232485",
+    "job_uid":  "571391",
+    "job_user":  "scasag",
+    "jobid":  "1811667",
+    "localid":  "0",
+    "mem_per_node":  "81920",
+    "nnodes":  "1",
+    "nodeid":  "0",
+    "nodelist":  "gpu019",
+    "prio_process":  "0",
+    "procid":  "0",
+    "script_context":  "prolog_task",
+    "submit_dir":  "/users/scasag/E-D3DGS",
+    "submit_host":  "login4.aire.lee.alces.network",
+    "task_pid":  "3118385",
+    "tasks_per_node":  "1",
+    "topology_addr":  "coresw1.ibsw4.gpu019",
+    "topology_addr_pattern":  "switch.switch.node"
+  },
+  "writerId":  "z52h0o9fj1459h3zcn0dalyxas4a6gx2"
+}

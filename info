@@ -1,0 +1,39 @@
+----------------------------------------------------------- [1;94m/opt/apps/etc/modulefiles/compilers[0m ------------------------------------------------------------
+cuda/12.4.1                  intel/oneapi/compiler-intel-llvm/2025.0.4  intel/oneapi/dpct/2025.0.0               intel/oneapi/tbb/2022.0    
+[90;47mcuda/12.6.2[0m                  intel/oneapi/compiler-rt/2025.0.4          intel/oneapi/dpl/2022.7                  intel/oneapi/umf/0.9.1     
+gcc/13.2.0                   intel/oneapi/compiler/2025.0.4             intel/oneapi/intel_ipp_intel64/2022.0    intel/oneapi/vtune/2025.0  
+gcc/14.2.0                   intel/oneapi/debugger/2025.0.0             intel/oneapi/intel_ippcp_intel64/2025.0  java/jdk-21.0.6            
+intel/oneapi/advisor/2025.0  intel/oneapi/dev-utilities/2025.0.0        intel/oneapi/mkl/2025.0                  
+intel/oneapi/ccl/2021.14.0   intel/oneapi/dnnl/3.6.1                    intel/oneapi/mpi/2021.14                 
+
+----------------------------------------------------------- [1;94m/opt/apps/etc/modulefiles/libraries[0m ------------------------------------------------------------
+fftw/3.3.10                                                netcdf/4.9.2/oneapi-2025.0.4_openmpi-5.0.6_hdf5-1.14.5  
+fftw/3.3.10/gcc-13.2.0_openmpi-5.0.6                       openblas/0.3.28/gcc-11.4.1                              
+hdf5/1.14.5/gcc-14.2.0                                     openblas/0.3.28/gcc-13.2.0                              
+hdf5/1.14.5/gcc-14.2.0_openmpi-5.0.5                       openblas/0.3.28/gcc-14.2.0                              
+hdf5/1.14.5/gcc-14.2.0_openmpi-5.0.6                       openmpi/5.0.5/gcc-14.2.0                                
+lapack/3.12.0                                              openmpi/5.0.6/gcc-13.2.0_cuda-12.6.2                    
+netcdf-fortran/4.6.1/gcc-14.2.0_openmpi-5.0.5_hdf5-1.14.5  openmpi/5.0.6/gcc-14.2.0                                
+netcdf-fortran/4.6.1/gcc-14.2.0_openmpi-5.0.6              pytorch/2.5.1                                           
+netcdf/4.9.2/gcc-14.2.0_hdf5-1.14.5                        vtk/9.3.1/gcc-14.2.0_hdf5-1.14.5                        
+netcdf/4.9.2/gcc-14.2.0_openmpi-5.0.5_hdf5-1.14.5          vtk/9.3.1/gcc-14.2.0_openmpi-5.0.5_hdf5-1.14.5          
+netcdf/4.9.2/gcc-14.2.0_openmpi-5.0.6_hdf5-1.14.5          which/2.21                                              
+
+------------------------------------------------------------- [1;94m/opt/apps/etc/modulefiles/tools[0m --------------------------------------------------------------
+apptainer/1.3.6  extra/SoCS  pixi/0.41.4  spack/0.23  subversion/1.14.5  texlive/2025  
+
+---------------------------------------------------------- [1;94m/opt/apps/etc/modulefiles/interpreters[0m ----------------------------------------------------------
+julia/1.11.3  [90;47mminiforge/24.7.1[0m  python/3.13.0  
+
+---------------------------------------------------------- [1;94m/opt/apps/etc/modulefiles/applications[0m ----------------------------------------------------------
+abaqus/2022                                                                    crest/3.0.2                            openfoam/v2412   schrodinger/2025-1  
+ambertools/23                                                                  gromacs/2024.4/gcc-13.2.0_cuda-12.6.2  orca/6.0.1       stata/18            
+ansys/2023R2                                                                   gromacs/2024.4/gcc-14.2.0              paraview/5.13.1  stata/19            
+ansys/2024R2                                                                   imb/2021.8                             qchem/6.0.2      xtb/6.7.1           
+castep/25.12/gcc-13.2.0_cuda-12.6.2_fftw-3.3.10_openblas-0.3.28                matlab/R2023a                          qchem/6.2.2      
+castep/25.12/gcc-13.2.0_cuda-12.6.2_fftw-3.3.10_openmpi-5.0.6_openblas-0.3.28  namd/2.14/gcc-13.2.0                   rclone/1.69.1    
+comsol/6.1                                                                     namd/3.0.1/gcc-13.2.0                  relion/5.0.0     
+comsol/6.2                                                                     openeye/2022.1.1                       rosetta/8.30     
+
+Key:
+[90;47mloaded[0m  [1;94mmodulepath[0m  

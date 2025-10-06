@@ -14,7 +14,7 @@ import sys
 from PIL import Image
 from typing import NamedTuple
 from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec2rotmat, \
-    read_extrinsics_binary, read_intrinsics_binary
+    read_extrinsics_binary, read_intrinsics_binary, read_points3D_binary
 from scene.hyper_loader import Load_hyper_data, format_hyper_data
 import copy
 from utils.graphics_utils import getWorld2View2, focal2fov
@@ -28,7 +28,6 @@ import glob
 import natsort
 import torch
 from tqdm import tqdm
-
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -393,12 +392,336 @@ def readHyperDataInfos(datadir,use_bg_points, eval, startime=0, duration=None):
                            ply_path=ply_path,
                            )
     return scene_info
+    
+## COLMAP SCENE INFO & CAMS FROM 3DGS - AUDIO
+
+class CameraInfoAudio(NamedTuple):
+    uid: int
+    R: np.array
+    T: np.array
+    FovY: np.array
+    FovX: np.array
+    image: np.array
+    image_path: str
+    image_name: str
+    width: int
+    height: int
+    near: float
+    far: float
+    timestamp: np.array
+    pose: np.array 
+    hpdirecitons: np.array
+    cxr: float
+    cyr: float
+
+def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder, duration):
+    cam_infos = []
+    
+    # get image names
+    
+    img_names = [] 
+    
+    for idx, key in enumerate(cam_extrinsics):
+        extr = cam_extrinsics[key]
+        img_names.append(extr.name)
+    
+    img_names = sorted(img_names)
+    
+    for idx, key in enumerate(cam_extrinsics):
+        sys.stdout.write('\r')
+        # the exact output you're looking for:
+        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
+        sys.stdout.flush()
+
+        extr = cam_extrinsics[key]
+        intr = cam_intrinsics[extr.camera_id]
+        height = intr.height
+        width = intr.width
+
+        uid = intr.id
+        R = np.transpose(qvec2rotmat(extr.qvec))
+        T = np.array(extr.tvec)
+
+        if intr.model=="SIMPLE_PINHOLE":
+            focal_length_x = intr.params[0]
+            FovY = focal2fov(focal_length_x, height)
+            FovX = focal2fov(focal_length_x, width)
+        elif intr.model=="PINHOLE":
+            focal_length_x = intr.params[0]
+            focal_length_y = intr.params[1]
+            FovY = focal2fov(focal_length_y, height)
+            FovX = focal2fov(focal_length_x, width)
+        else:
+            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
+
+        n_remove = len(extr.name.split('.')[-1]) + 1
+
+        image_path = os.path.join(images_folder, extr.name)
+        image_name = extr.name
+        #image = Image.open(image_path)
+        
+        video = image_name[:3] 
+        frame = image_name[4:-4]
+        idx_frame = int(frame.lstrip("0")) - 1
+        
+        aud_feats = np.load(f"{path}/audio_features/{video}.npy")
+        aud_feats = torch.from_numpy(aud_feats[idx_frame])
+        #print("Aud shape: ")
+        #print(aud_feats.shape)
+
+        cam_info = CameraInfoAudio(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=None,
+                              image_path=image_path, image_name=image_name,
+                              width=width, height=height, near=0.01, far=100,
+                              timestamp=aud_feats, pose=None,
+                              hpdirecitons=None, cxr=0.0, cyr=0.0,  
+                              )
+        cam_infos.append(cam_info)
+
+    sys.stdout.write('\n')
+    return cam_infos
+
+def readColmapSceneInfoAudio(path, images, duration):
+    try:
+        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
+        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
+        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
+        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
+    except:
+        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
+        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
+        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
+        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+
+
+    reading_dir = "images" if images == None else images
+    cam_infos_unsorted = readColmapCamerasAudio(path=path,
+        cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics,
+        images_folder=os.path.join(path, reading_dir), duration=duration)
+    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+    
+    test_cam_infos = []
+    train_cam_infos = []
+    
+    for c in cam_infos:
+      #train_cam_infos.append(c)
+      
+      if "001_" in c.image_name:  # "017_"
+        train_cam_infos.append(c)
+      elif "002_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "003_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "004_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "005_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "006_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "007_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "008_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "009_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "010_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "011_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "012_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "013_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "014_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "015_" in c.image_name:
+        train_cam_infos.append(c)
+      else:
+        test_cam_infos.append(c)
+      
+
+    #test_cam_infos = [c for c in cam_infos if c.image_name in ["003", "010", "023", ""]]
+    #train_cam_infos = [c for c in cam_infos if "0005" not in c.image_name and "0021" not in c.image_name]
+    
+    print("\n Train Cams: ", len(train_cam_infos))
+    print("\n Test Cams: ", len(test_cam_infos))
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "sparse/0/points3D.ply")
+    bin_path = os.path.join(path, "sparse/0/points3D.bin")
+    txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    if not os.path.exists(ply_path):
+        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
+        try:
+            xyz, rgb, _ = read_points3D_binary(bin_path)
+        except:
+            xyz, rgb, _ = read_points3D_text(txt_path)
+        storePly(ply_path, xyz, rgb)
+    try:
+        pcd = fetchPly(ply_path)
+    except:
+        pcd = None
+
+    # replace colmap sparse reconstruction with downsampled dense reconstruction
+    
+    ply_path = os.path.join(path, "points3D_downsample.ply")
+    pcd = fetchPly(ply_path)
+    xyz = np.array(pcd.points)
+    pcd = pcd._replace(points=xyz)
+    
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           video_cameras=[],
+                           ply_path=ply_path)
+    return scene_info
+
+## COLMAP SCENE INFO & CAMS FROM 3DGS
+
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, duration):
+    cam_infos = []
+    
+    # get image names
+    
+    img_names = [] 
+    
+    for idx, key in enumerate(cam_extrinsics):
+        extr = cam_extrinsics[key]
+        img_names.append(extr.name)
+    
+    img_names = sorted(img_names)
+    
+    for idx, key in enumerate(cam_extrinsics):
+        sys.stdout.write('\r')
+        # the exact output you're looking for:
+        sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
+        sys.stdout.flush()
+
+        extr = cam_extrinsics[key]
+        intr = cam_intrinsics[extr.camera_id]
+        height = intr.height
+        width = intr.width
+
+        uid = intr.id
+        R = np.transpose(qvec2rotmat(extr.qvec))
+        T = np.array(extr.tvec)
+
+        if intr.model=="SIMPLE_PINHOLE":
+            focal_length_x = intr.params[0]
+            FovY = focal2fov(focal_length_x, height)
+            FovX = focal2fov(focal_length_x, width)
+        elif intr.model=="PINHOLE":
+            focal_length_x = intr.params[0]
+            focal_length_y = intr.params[1]
+            FovY = focal2fov(focal_length_y, height)
+            FovX = focal2fov(focal_length_x, width)
+        else:
+            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
+
+        n_remove = len(extr.name.split('.')[-1]) + 1
+
+        image_path = os.path.join(images_folder, extr.name)
+        image_name = extr.name
+        #image = Image.open(image_path)
+
+        cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=None,
+                              image_path=image_path, image_name=image_name,
+                              width=width, height=height, near=0.01, far=100,
+                              timestamp=img_names.index(image_name)/duration, pose=None,
+                              hpdirecitons=None, cxr=0.0, cyr=0.0,  
+                              )
+        cam_infos.append(cam_info)
+
+    sys.stdout.write('\n')
+    return cam_infos
+
+def readColmapSceneInfo(path, images, duration):
+    try:
+        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
+        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
+        cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
+        cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
+    except:
+        cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.txt")
+        cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.txt")
+        cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
+        cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+
+
+    reading_dir = "images" if images == None else images
+    cam_infos_unsorted = readColmapCameras(
+        cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics,
+        images_folder=os.path.join(path, reading_dir), duration=duration)
+    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
+    
+    test_cam_infos = []
+    train_cam_infos = []
+    
+    for c in cam_infos:
+      #train_cam_infos.append(c)
+      
+      if "017_" in c.image_name:
+        train_cam_infos.append(c)
+      else:
+        test_cam_infos.append(c)
+      '''
+      elif "002_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "003_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "004_" in c.image_name:
+        train_cam_infos.append(c)
+      elif "005_" in c.image_name:
+        train_cam_infos.append(c)
+      '''
+      
+
+    #test_cam_infos = [c for c in cam_infos if c.image_name in ["003", "010", "023", ""]]
+    #train_cam_infos = [c for c in cam_infos if "0005" not in c.image_name and "0021" not in c.image_name]
+    
+    print("\n Train Cams: ", len(train_cam_infos))
+    print("\n Test Cams: ", len(test_cam_infos))
+
+    nerf_normalization = getNerfppNorm(train_cam_infos)
+
+    ply_path = os.path.join(path, "sparse/0/points3D.ply")
+    bin_path = os.path.join(path, "sparse/0/points3D.bin")
+    txt_path = os.path.join(path, "sparse/0/points3D.txt")
+    if not os.path.exists(ply_path):
+        print("Converting point3d.bin to .ply, will happen only the first time you open the scene.")
+        try:
+            xyz, rgb, _ = read_points3D_binary(bin_path)
+        except:
+            xyz, rgb, _ = read_points3D_text(txt_path)
+        storePly(ply_path, xyz, rgb)
+    try:
+        pcd = fetchPly(ply_path)
+    except:
+        pcd = None
+
+    # replace colmap sparse reconstruction with downsampled dense reconstruction
+    
+    ply_path = os.path.join(path, "points3D_downsample.ply")
+    pcd = fetchPly(ply_path)
+    xyz = np.array(pcd.points)
+    pcd = pcd._replace(points=xyz)
+    
+    scene_info = SceneInfo(point_cloud=pcd,
+                           train_cameras=train_cam_infos,
+                           test_cameras=test_cam_infos,
+                           nerf_normalization=nerf_normalization,
+                           video_cameras=[],
+                           ply_path=ply_path)
+    return scene_info
 
 
 sceneLoadTypeCallbacks = {
     "Technicolor": readColmapSceneInfoTechnicolor,
     "Nerfies": readHyperDataInfos,
     "Dynerf": readColmapSceneInfoDynerf,
+    "Colmap": readColmapSceneInfo,
+    "ColmapAudio": readColmapSceneInfoAudio,
 }
 
 # modify the code in https://github.com/hustvl/4DGaussians/blob/master/scene/neural_3D_dataset_NDC.py
