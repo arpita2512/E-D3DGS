@@ -14,7 +14,7 @@ import random
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim, l2_loss, lpips_loss
+from utils.loss_utils import l1_loss, ssim, l2_loss, lpips_loss, patchify
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -28,6 +28,9 @@ from utils.timer import Timer
 from utils.extra_utils import o3d_knn, weighted_l2_loss_v2, image_sampler, calculate_distances, sample_camera
 
 import wandb
+to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
+import torchvision
+import lpips
 
 # import lpips
 from utils.scene_utils import render_training_image
@@ -37,20 +40,24 @@ to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
 
 def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_iterations, 
                          checkpoint_iterations, checkpoint, debug_from,
-                         gaussians, scene, tb_writer, train_iter,timer, start_time):
+                         gaussians, scene, tb_writer, train_iter,timer, start_time, expname):
+    print("in scene recon!")
     first_iter = 0
-
+    
+    opt.densify_until_iter = opt.iterations - 1000
+    lpips_start_iter = 0 # opt.densify_until_iter - 2000   
+    
     gaussians.training_setup(opt)
     
-    wandb.init(project="ed3dgs_mead_align", name="do_fifteen_lowOpaLoss", notes="net width 64")#, mode="offline")
+    wandb.init(project="may_smooth", name=expname, notes="net width 64", mode="offline")
     
-    wandb.watch(gaussians._deformation, log="all")
+    #wandb.watch(gaussians._deformation, log="all")
     
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
 
-    bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+    bg_color = [0, 1, 0] #if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
     iter_start = torch.cuda.Event(enable_timing = True)
@@ -67,6 +74,8 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     train_cams = scene.getTrainCameras()
     test_cams = scene.getTestCameras()
     video_cams = None
+    
+    lpips_criterion = lpips.LPIPS(net='alex').eval().cuda()
 
     num_traincams = 1
     if dataset.loader not in ['nerfies', 'colmap', 'colmapAudio']: # for multi-view setting
@@ -99,7 +108,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     if dataset.loader not in ['nerfies', 'colmap', 'colmapAudio']:
         train_cams = sorted(train_cams, key=lambda x: (x.cam_no, x.frame_no))
 
-    viewpoint_stack = train_cams
+    viewpoint_stack = train_cams #sorted(train_cams, key = lambda x : x.image_name)
     method = None
 
     start_time = time()
@@ -138,6 +147,11 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         # Render
         if (iteration - 1) == debug_from:
             pipe.debug = True
+        
+        
+        lip_imgs = []
+        gt_lip_imgs = []
+        
         images = []
         gt_images = []
         radii_list = []
@@ -151,21 +165,60 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             frame_no = viewpoint_cam.frame_no
             cam_no_list.append(cam_no)
             frame_no_list.append(frame_no)
+            
+            ## Render with green bg
             render_pkg = render(viewpoint_cam, gaussians, pipe, background, cam_no=cam_no, iter=iteration, \
                 num_down_emb_c=hyper.min_embeddings, num_down_emb_f=hyper.min_embeddings)
+            
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+            
+            # new stuff for bg
+            head_mask = torch.as_tensor(viewpoint_cam.talking_dict['face_mask'] + viewpoint_cam. talking_dict['hair_mask'] + viewpoint_cam.talking_dict['mouth_mask']).cuda()
+            
+            #head_torso_mask = torch.as_tensor(viewpoint_cam.talking_dict['face_mask'] + viewpoint_cam.talking_dict['hair_mask'] + viewpoint_cam. talking_dict['mouth_mask'] \
+            # + viewpoint_cam.talking_dict['torso_mask'] + viewpoint_cam.talking_dict['neck_mask']).cuda()
 
-            images.append(image.unsqueeze(0))
+            images.append(image.unsqueeze(0)) 
             gt_image = viewpoint_cam.original_image.cuda()
-            gt_images.append(gt_image.unsqueeze(0))
+            
+            gt_image_white = gt_image * head_mask + background[:, None, None] * ~head_mask
+            
+            # LIPS
+            
+            '''
+            if iteration > lpips_start_iter:
+              image_t = image.clone()
+              gt_image_t = gt_image_white.clone()
+              
+              [xmin, xmax, ymin, ymax] = viewpoint_cam.talking_dict['lips_rect']
+              
+              lip_img = image_t.clone()[:, xmin:xmax, ymin:ymax] #* 2 - 1
+              gt_lip_img = gt_image_t.clone()[:, xmin:xmax, ymin:ymax] #* 2 - 1
+              
+              lip_imgs.append(lip_img.unsqueeze(0))
+              gt_lip_imgs.append(gt_lip_img.unsqueeze(0))
+            '''
+            
+            # Lips END
+            
+            #print(iteration, viewpoint_cam.image_name)
+            
+            #if iteration == 1000:
+            #  torchvision.utils.save_image(gt_image_white, f"gt_{iteration}_{viewpoint_cam.image_name}")
+            #  torchvision.utils.save_image(image, f"render_{iteration}_{viewpoint_cam.image_name}")      
+            
+            gt_images.append(gt_image_white.unsqueeze(0))
             radii_list.append(radii.unsqueeze(0))
             visibility_filter_list.append(visibility_filter.unsqueeze(0))
             viewspace_point_tensor_list.append(viewspace_point_tensor)
+            
         
         radii = torch.cat(radii_list,0).max(dim=0).values
         visibility_filter = torch.cat(visibility_filter_list).any(dim=0)
         image_tensor = torch.cat(images,0)
         gt_image_tensor = torch.cat(gt_images,0)
+        
+        #print("\nIMG tensor shapes: ", gt_image_tensor.shape, image_tensor.shape)
 
         
         Ll1 = l1_loss(image_tensor, gt_image_tensor, keepdim=True)
@@ -215,6 +268,7 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             'loss_emb_reg_knn': opt.reg_coef * weighted_l2_loss_v2(emb, emb_knn, neighbor_weight),
         })
 
+
         # smoothness reg on temporal embeddings
         if opt.coef_tv_temporal_embedding > 0:
             weights = gaussians._deformation.weight
@@ -225,7 +279,28 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             wandb.log({
                 'loss_smooth_reg_temporal': opt.coef_tv_temporal_embedding * torch.square(second_difference).mean(),
             })
-
+        
+        ''' # loss based on consecutive image frames
+        # smoothness reg on temporal embeddings
+        if opt.coef_tv_temporal_embedding > 0:
+            bs_img, c_img, h_img, w_img = image_tensor.size()
+            tv_h = torch.pow(image_tensor[:,:,1:,:]-image_tensor[:,:,:-1,:], 2).sum()
+            tv_w = torch.pow(image_tensor[:,:,:,1:]-image_tensor[:,:,:,:-1], 2).sum()
+            loss += opt.coef_tv_temporal_embedding * (tv_h+tv_w)/(bs_img*c_img*h_img*w_img)
+            wandb.log({
+                'tv_loss': opt.coef_tv_temporal_embedding * (tv_h+tv_w)/(bs_img*c_img*h_img*w_img),
+            })
+        '''
+        
+        # lip loss
+        
+        if iteration > lpips_start_iter:
+          loss += 0.01 * lpips_criterion(image_tensor, gt_image_tensor).mean()
+          wandb.log({
+              'lpips': 0.01 * lpips_criterion(image_tensor, gt_image_tensor).mean(),
+          })
+          
+        
         wandb.log({
             'loss_total': loss,
             'iter': iteration,
@@ -234,38 +309,6 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         })
         
         loss.backward()
-        
-        '''
-        wandb.log({
-            'g_params/xyz_min': gaussians._xyz.min().item(),
-            'g_params/xyz_max': gaussians._xyz.max().item(),
-            'g_params/xyz_avg': gaussians._xyz.mean().item(),
-            
-            'g_params/sca_min': gaussians._scaling.min().item(),
-            'g_params/sca_max': gaussians._scaling.max().item(),
-            'g_params/sca_avg': gaussians._scaling.mean().item(),
-            
-            'g_params/rot_min': gaussians._rotation.min().item(),
-            'g_params/rot_max': gaussians._rotation.max().item(),
-            'g_params/rot_avg': gaussians._rotation.mean().item(),
-            
-            'g_params/opa_min': gaussians._opacity.min().item(),
-            'g_params/opa_max': gaussians._opacity.max().item(),
-            'g_params/opa_avg': gaussians._opacity.mean().item(),
-            
-            'g_params/emb_min': gaussians._embedding.min().item(),
-            'g_params/emb_max': gaussians._embedding.max().item(),
-            'g_params/emb_avg': gaussians._embedding.mean().item(),
-            
-            'g_params/fdc_min': gaussians._features_dc.min().item(),
-            'g_params/fdc_max': gaussians._features_dc.max().item(),
-            'g_params/fdc_avg': gaussians._features_dc.mean().item(),
-            
-            'g_params/fr_min': gaussians._features_rest.min().item(),
-            'g_params/fr_max': gaussians._features_rest.max().item(),
-            'g_params/fr_avg': gaussians._features_rest.mean().item(),
-        })
-        '''
         
         viewspace_point_tensor_grad = torch.zeros_like(viewspace_point_tensor)
         for idx in range(0, len(viewspace_point_tensor_list)):
@@ -349,21 +392,20 @@ def training(dataset, hyper, opt, pipe, testing_iterations, saving_iterations, c
     timer = Timer()
     scene = Scene(dataset, gaussians, shuffle=dataset.shuffle, loader=dataset.loader, duration=None, opt=opt)
     
-    print("audio load success!")
+    print("scene load success!")
+      
     timer.start()
     
     start_time = time()
     scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_iterations,
                          checkpoint_iterations, checkpoint, debug_from,
-                         gaussians, scene, tb_writer, opt.iterations, timer, start_time)
+                         gaussians, scene, tb_writer, opt.iterations, timer, start_time, expname)
     end_time = time()
     
     total_time_seconds = end_time - start_time
     hours, remainder = divmod(total_time_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     print(f"training time: {int(hours)}h {int(minutes)}m {seconds}sec")
-    
-
 
 def prepare_output_and_logger(expname):    
     if not args.model_path:
@@ -401,7 +443,7 @@ if __name__ == "__main__":
     parser.add_argument('--debug_from', type=int, default=-1)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
     parser.add_argument("--test_iterations", nargs="+", type=int, default=[i*500 for i in range(0,120)])
-    parser.add_argument("--save_iterations", nargs="+", type=int, default=[3000, 5000, 7000, 14000, 20000, 30000, 45000, 60000, 80000, 100000, 120000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1000, 3000, 5000, 7000, 14000, 20000, 30000, 50000, 60000, 80000, 100000, 120000])
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)

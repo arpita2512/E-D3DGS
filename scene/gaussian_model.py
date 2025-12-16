@@ -22,6 +22,7 @@ from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 from scene.deformation import deform_network
+from scene.deformation_mouth import deform_network_mouth
 
 
 class GaussianModel:
@@ -44,12 +45,18 @@ class GaussianModel:
         self.rotation_activation = torch.nn.functional.normalize
 
 
-    def __init__(self, sh_degree : int, args):
+    def __init__(self, sh_degree : int, args, deform_type="head"):
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree
 
         self._xyz = torch.empty(0)
-        self._deformation = deform_network(W=args.net_width, D=args.defor_depth, 
+        if deform_type == "head":
+          self._deformation = deform_network(W=args.net_width, D=args.defor_depth, 
+                                           min_embeddings=args.min_embeddings, max_embeddings=args.max_embeddings, 
+                                           num_frames=args.total_num_frames,
+                                           args=args)
+        else:
+          self._deformation = deform_network_mouth(W=args.net_width, D=args.defor_depth, 
                                            min_embeddings=args.min_embeddings, max_embeddings=args.max_embeddings, 
                                            num_frames=args.total_num_frames,
                                            args=args)

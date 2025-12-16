@@ -40,8 +40,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         debug=pipe.debug,
         antialiasing=pipe.antialiasing,
     )
-    time = torch.tensor(viewpoint_camera.time).to(means3D.device).repeat(means3D.shape[0],1)
-    #time = torch.tensor(viewpoint_camera.time).to(means3D.device).repeat(means3D.shape[0],1)
+    
+    aud = torch.from_numpy(viewpoint_camera.aud).to(means3D.device)#.repeat(means3D.shape[0],1)
+    
+    exp_feat = viewpoint_camera.talking_dict['au_exp'].to(means3D.device).repeat(means3D.shape[0],1)
+    #print("exp_feat shape: ", exp_feat.shape)
+    time = None#torch.tensor(viewpoint_camera.time).to(means3D.device).repeat(means3D.shape[0],1)
   
     # else:
     #     raster_settings = viewpoint_camera['camera']
@@ -71,7 +75,7 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         rotations = pc._rotation
 
     means3D_final, scales_final, rotations_final, opacity_final, shs_final, extras = pc._deformation(means3D, scales, 
-        rotations, opacity, time, cam_no, pc, None, shs, iter=iter, num_down_emb_c=num_down_emb_c, num_down_emb_f=num_down_emb_f)
+        rotations, opacity, time, aud, cam_no, pc, None, shs, iter=iter, num_down_emb_c=num_down_emb_c, num_down_emb_f=num_down_emb_f, exp_feat=exp_feat)
 
     scales_final = pc.scaling_activation(scales_final)
     rotations_final = pc.rotation_activation(rotations_final)

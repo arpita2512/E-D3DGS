@@ -56,7 +56,7 @@ class ModelParams(ParamGroup):
         self.eval = True
         self.render_process=False
         self.loader = "colmap"
-        self.shuffle = True
+        self.shuffle = False
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -84,6 +84,7 @@ class ModelHiddenParams(ParamGroup):
         self.no_dc=False
         
         self.temporal_embedding_dim=256
+        self.aud_embedding_dim=2048
         self.gaussian_embedding_dim=32
         self.use_coarse_temporal_embedding=False
         self.no_c2f_temporal_embedding=False

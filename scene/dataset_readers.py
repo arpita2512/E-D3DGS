@@ -28,6 +28,7 @@ import glob
 import natsort
 import torch
 from tqdm import tqdm
+import pandas as pd
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -395,6 +396,44 @@ def readHyperDataInfos(datadir,use_bg_points, eval, startime=0, duration=None):
     
 ## COLMAP SCENE INFO & CAMS FROM 3DGS - AUDIO
 
+#### audionet
+
+def get_audio_features(features, att_mode, index):
+    if att_mode == 0:
+        return features[[index]]
+    elif att_mode == 1:
+        left = index - 8
+        pad_left = 0
+        if left < 0:
+            pad_left = -left
+            left = 0
+        auds = features[left:index]
+        if pad_left > 0:
+            # pad may be longer than auds, so do not use zeros_like
+            auds = torch.cat([torch.zeros(pad_left, *auds.shape[1:], device=auds.device, dtype=auds.dtype), auds], dim=0)
+        return auds
+    elif att_mode == 2:
+        left = index - 4
+        right = index + 4
+        pad_left = 0
+        pad_right = 0
+        if left < 0:
+            pad_left = -left
+            left = 0
+        if right > features.shape[0]:
+            pad_right = right - features.shape[0]
+            right = features.shape[0]
+        auds = features[left:right]
+        if pad_left > 0:
+            auds = torch.cat([torch.zeros_like(auds[:pad_left]), auds], dim=0)
+        if pad_right > 0:
+            auds = torch.cat([auds, torch.zeros_like(auds[:pad_right])], dim=0) # [8, 16]
+        return auds
+    else:
+        raise NotImplementedError(f'wrong att_mode: {att_mode}')
+
+#### audionet
+
 class CameraInfoAudio(NamedTuple):
     uid: int
     R: np.array
@@ -408,11 +447,14 @@ class CameraInfoAudio(NamedTuple):
     height: int
     near: float
     far: float
-    timestamp: np.array
+    timestamp: float
+    aud: np.array
     pose: np.array 
     hpdirecitons: np.array
     cxr: float
     cyr: float
+    background_path: str
+    talking_dict: dict
 
 def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
@@ -427,7 +469,69 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     
     img_names = sorted(img_names)
     
-    for idx, key in enumerate(cam_extrinsics):
+    #duration = len(img_names)
+    
+    # subset for testing -  NEED TO CHANGE
+    #img_names = img_names[:100]
+    #cam_extrinsics_subset = sorted(cam_extrinsics.items(), key=lambda x: x[1].name)
+    #cam_extrinsics_subset = cam_extrinsics_subset[:100]
+    
+    #cam_extrinsics = {}
+    #for key, value in cam_extrinsics_subset:
+    #  cam_extrinsics[key] = value
+    ############
+    
+    aud_file = np.load(f"{path}/audio_features/aud_hu.npy")  #CHANGED FOR SINGLE VID
+    aud_file = torch.from_numpy(aud_file)
+    aud_file = aud_file.float().permute(0, 2, 1)
+    
+    # AU and LMS
+    
+    au_info=pd.read_csv(os.path.join(path, 'au.csv'))
+    au_blink = au_info[' AU45_r'].values
+    au25 = au_info[' AU25_r'].values
+    au25 = np.clip(au25, 0, np.percentile(au25, 95))
+    
+    au25_25, au25_50, au25_75, au25_100 = np.percentile(au25, 25), np.percentile(au25, 50), np.percentile(au25, 75), au25.max()
+    
+    au_exp = []
+    
+    for i in [1,4,5,6,7,45]:
+      _key = ' AU' + str(i).zfill(2) + '_r'
+      au_exp_t = au_info[_key].values
+      if i == 45:
+        au_exp_t = au_exp_t.clip(0, 2)
+      au_exp.append(au_exp_t[:, None])
+    au_exp = np.concatenate(au_exp, axis=-1, dtype=np.float32)
+    
+    # LMS
+    ldmks_lips = []
+    ldmks_mouth = []
+    ldmks_lhalf = []
+    
+    for idx, frame in tqdm(enumerate(img_names)):
+            lms = np.loadtxt(os.path.join(path, 'images', frame[:-4] + '.lms')) # [68, 2]
+            lips = slice(48, 60)
+            mouth = slice(60, 68)
+            xmin, xmax = int(lms[lips, 1].min()), int(lms[lips, 1].max())
+            ymin, ymax = int(lms[lips, 0].min()), int(lms[lips, 0].max())
+
+            ldmks_lips.append([int(xmin), int(xmax), int(ymin), int(ymax)])
+            ldmks_mouth.append([int(lms[mouth, 1].min()), int(lms[mouth, 1].max())])
+
+            lh_xmin, lh_xmax = int(lms[31:36, 1].min()), int(lms[:, 1].max()) # actually lower half area
+            xmin, xmax = int(lms[:, 1].min()), int(lms[:, 1].max())
+            ymin, ymax = int(lms[:, 0].min()), int(lms[:, 0].max())
+            # self.face_rect.append([xmin, xmax, ymin, ymax])
+            ldmks_lhalf.append([lh_xmin, lh_xmax, ymin, ymax])
+
+    ldmks_lips = np.array(ldmks_lips)
+    ldmks_mouth = np.array(ldmks_mouth)
+    ldmks_lhalf = np.array(ldmks_lhalf)
+    mouth_lb = (ldmks_mouth[:, 1] - ldmks_mouth[:, 0]).min()
+    mouth_ub = (ldmks_mouth[:, 1] - ldmks_mouth[:, 0]).max()
+    
+    for idx, key in enumerate(cam_extrinsics):        
         sys.stdout.write('\r')
         # the exact output you're looking for:
         sys.stdout.write("Reading camera {}/{}".format(idx+1, len(cam_extrinsics)))
@@ -460,27 +564,65 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
         image_name = extr.name
         #image = Image.open(image_path)
         
-        video = image_name[:3] 
-        frame = image_name[4:-4]
+        # load bg image
+        background_path = f"{path}/torso_imgs/{image_name[:-4]}.png"
+        
+        #video = image_name[:3] CHANGED FOR SINGLE VID
+        frame = image_name[:-4] # image_name[4:-4] CHANGED FOR SINGLE VID
         idx_frame = int(frame.lstrip("0")) - 1
         
-        aud_feats = np.load(f"{path}/audio_features/{video}.npy")
-        aud_feats = torch.from_numpy(aud_feats[idx_frame])
+        aud_feats = get_audio_features(aud_file, 2, idx_frame).numpy()
         #print("Aud shape: ")
         #print(aud_feats.shape)
+        talking_dict = {}
+        
+        mask = np.array(Image.open(os.path.join(path, "parsing", f"{image_name[:-4]}.png")).convert("RGB"))
+        
+        talking_dict['face_mask'] = (mask[:, :, 2] > 254) * (mask[:, :, 0] == 0) * (mask[:, :, 1] == 0)
+        talking_dict['hair_mask'] = (mask[:, :, 0] < 1) * (mask[:, :, 1] < 1) * (mask[:, :, 2] < 1)
+        talking_dict['mouth_mask'] = (mask[:, :, 0] == 100) * (mask[:, :, 1] == 100) * (mask[:, :, 2] == 100)
+        talking_dict['torso_mask'] = (mask[:, :, 0] == 255) & (mask[:, :, 1] == 0) & (mask[:, :, 2] == 0)
+        talking_dict['neck_mask'] = (mask[:, :, 0] == 0) & (mask[:, :, 1] == 255) & (mask[:, :, 2] == 0)
+        
+        del mask;
+        
+        
+        # AU and LMS
+        
+        talking_dict['blink'] = torch.as_tensor(np.clip(au_blink[idx_frame], 0, 2) / 2)
+        talking_dict['au25'] = [au25[idx_frame], au25_25, au25_50, au25_75, au25_100]
+        
+        talking_dict['au_exp'] = torch.as_tensor(au_exp[idx_frame])
+        
+        #print(image_name, talking_dict['au_exp'])
+        
+        [xmin, xmax, ymin, ymax] = ldmks_lips[idx_frame].tolist()
+        # padding to H == W
+        cx = (xmin + xmax) // 2
+        cy = (ymin + ymax) // 2
+        
+        l = max(xmax - xmin, ymax - ymin) // 2
+        xmin = cx - l
+        xmax = cx + l
+        ymin = cy - l
+        ymax = cy + l
+        
+        talking_dict['lips_rect'] = [xmin, xmax, ymin, ymax]
+        talking_dict['lhalf_rect'] = ldmks_lhalf[idx]
+        talking_dict['mouth_bound'] = [mouth_lb, mouth_ub, ldmks_mouth[idx, 1] - ldmks_mouth[idx, 0]]
 
         cam_info = CameraInfoAudio(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=None,
                               image_path=image_path, image_name=image_name,
                               width=width, height=height, near=0.01, far=100,
-                              timestamp=aud_feats, pose=None,
-                              hpdirecitons=None, cxr=0.0, cyr=0.0,  
+                              timestamp=None, aud=aud_feats, pose=None,
+                              hpdirecitons=None, cxr=0.0, cyr=0.0, background_path=background_path, talking_dict=talking_dict
                               )
         cam_infos.append(cam_info)
-
+        
     sys.stdout.write('\n')
     return cam_infos
 
-def readColmapSceneInfoAudio(path, images):
+def readColmapSceneInfoAudio(path, images, ply_name="points3D_downsample.ply"):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -494,22 +636,20 @@ def readColmapSceneInfoAudio(path, images):
 
 
     reading_dir = "images" if images == None else images
+    
     cam_infos_unsorted = readColmapCamerasAudio(path=path,
         cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics,
         images_folder=os.path.join(path, reading_dir))
-    cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
     
-    test_cam_infos = []
-    train_cam_infos = []
+    cam_infos = sorted(cam_infos_unsorted, key = lambda x : x.image_name)
     
-    for c in cam_infos:
-      #train_cam_infos.append(c)
-      
-      if c.image_name.startswith(("001", "002","003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015")): 
-        train_cam_infos.append(c)
-      else:
-        test_cam_infos.append(c)
-      
+    split_idx = 8132
+    
+    train_cam_infos =cam_infos[:split_idx] 
+    test_cam_infos = cam_infos[split_idx:]
+    
+    #for c in cam_infos:
+    #  train_cam_infos.append(c)
 
     #test_cam_infos = [c for c in cam_infos if c.image_name in ["003", "010", "023", ""]]
     #train_cam_infos = [c for c in cam_infos if "0005" not in c.image_name and "0021" not in c.image_name]
@@ -536,7 +676,7 @@ def readColmapSceneInfoAudio(path, images):
 
     # replace colmap sparse reconstruction with downsampled dense reconstruction
     
-    ply_path = os.path.join(path, "points3D_downsample.ply")
+    ply_path = os.path.join(path, ply_name)
     pcd = fetchPly(ply_path)
     xyz = np.array(pcd.points)
     pcd = pcd._replace(points=xyz)
@@ -547,6 +687,7 @@ def readColmapSceneInfoAudio(path, images):
                            nerf_normalization=nerf_normalization,
                            video_cameras=[],
                            ply_path=ply_path)
+    
     return scene_info
 
 ## COLMAP SCENE INFO & CAMS FROM 3DGS

@@ -1,6 +1,6 @@
 ModelParams = dict(
     loader = "colmapAudio",
-    shuffle = True,
+    shuffle = False,
     _white_background=False,
     data_device = "cpu",
 )
@@ -13,7 +13,8 @@ ModelHiddenParams = dict(
     no_do = False,
     no_dc = True,
     
-    temporal_embedding_dim = 1707, # 256,
+    temporal_embedding_dim = 128,
+    aud_embedding_dim = 64,
     gaussian_embedding_dim = 32,
     use_coarse_temporal_embedding = True,
     zero_temporal = False,
@@ -28,24 +29,24 @@ OptimizationParams = dict(
     dataloader = True,
     batch_size = 1,
     maxtime = None, #1690, #4270, #4330, #465, #171,
-    iterations = 80_000,
+    iterations = 30_000,
 
     lambda_dssim = 0.2,
     num_multiview_ssim = 0,
     use_colmap = True,
-    position_lr_max_steps = 80_000,
-    deformation_lr_max_steps = 80_000,
+    position_lr_max_steps = 30_000,
+    deformation_lr_max_steps = 30_000,
     
     #densify_from_iter = 5000,    
-    #pruning_from_iter = 600_000,    
+    pruning_from_iter = 100_000,    
     #pruning_interval  = 1000,
     
-    opacity_l1_coef_fine = 0.00001,
-    densify_until_iter = 80_000,
+    opacity_l1_coef_fine = 0.0001,
+    densify_until_iter = 30_000,
     
     #deformation_lr_init = 0.00016,
     #deformation_lr_final = 0.000016,
 
-    coef_tv_temporal_embedding = 0.0001,
+    coef_tv_temporal_embedding = 0, #.0001,
     reg_coef = 1.0,
 )

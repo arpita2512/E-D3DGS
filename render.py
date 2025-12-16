@@ -26,6 +26,9 @@ from gaussian_renderer import GaussianModel
 from time import time
 to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
 
+from utils.general_utils import PILtoTorch
+from PIL import Image
+
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, hyperparam=None):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
@@ -44,6 +47,8 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     count = 0
     total_time = 0
     
+    real_bg = PILtoTorch(Image.open("/mnt/scratch/scasag/tmay/bc.jpg").convert("RGB"), None).cuda()
+    
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         if type(view.original_image) == type(None):
             if name == 'video':
@@ -51,17 +56,25 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             else:
                 view.load_image()
         time1 = time()
+        
         rendering = render(view, gaussians, pipeline, background, iter=iteration, num_down_emb_c=num_down_emb_c, num_down_emb_f=num_down_emb_f)["render"]
+        
+        head_mask = torch.as_tensor(view.talking_dict['face_mask'] + view.talking_dict['hair_mask'] + view.talking_dict['mouth_mask']).cuda()
+        
+        head_torso_mask = torch.as_tensor(view.talking_dict['face_mask'] + view.talking_dict['hair_mask'] + view.talking_dict['mouth_mask'] + view.talking_dict['torso_mask'] + view.talking_dict['neck_mask']).cuda()
+        
+        render_with_bg = rendering - background[:, None, None] * ~head_mask + real_bg * ~head_torso_mask + view.background.cuda() * ~head_mask
+        
         time2 = time()
         total_time += (time2 - time1)
-        render_images.append(to8b(rendering).transpose(1,2,0))
-        torchvision.utils.save_image(rendering, os.path.join(render_path, view.image_name))
-        # render_list.append(rendering)
+        render_images.append(to8b(render_with_bg).transpose(1,2,0))
+        torchvision.utils.save_image(render_with_bg, os.path.join(render_path, view.image_name))
+        render_list.append(rendering)
     
-        #if name in ["train", "test"]:
-        #    gt = view.original_image[0:3, :, :]
-        #    torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(count) + ".png"))
-            # gt_list.append(gt)
+        if name in ["train", "test"]:
+            gt = view.original_image[0:3, :, :]
+            torchvision.utils.save_image(gt, os.path.join(gts_path, view.image_name))
+            gt_list.append(gt)
         count +=1
         
     print("FPS:",(len(views)-1)/total_time)
@@ -87,7 +100,7 @@ def render_sets(dataset : ModelParams, hyperparam, opt, iteration : int, pipelin
         gaussians = GaussianModel(dataset.sh_degree, hyperparam)
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False, duration=None, loader=dataset.loader, opt=opt)
 
-        bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
+        bg_color = [0,1,0] #if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:

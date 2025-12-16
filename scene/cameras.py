@@ -23,8 +23,8 @@ from PIL import Image
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
                  image_name, uid,
-                 trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda", near=0.01, far=100.0, timestamp=0.0, rayo=None, rayd=None, rays=None, cxr=0.0,cyr=0.0,
-                 cam_no=None, frame_no=None, image_path=None, img_wh=None):
+                 trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda", near=0.01, far=100.0, timestamp=None, aud=None, rayo=None, rayd=None, rays=None, cxr=0.0,cyr=0.0,
+                 cam_no=None, frame_no=None, image_path=None, img_wh=None, background=None, talking_dict=None):
         super(Camera, self).__init__()
 
         self.uid = uid
@@ -35,6 +35,7 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
         self.time = timestamp
+        self.aud = aud
         self.cam_no = cam_no
         self.frame_no = frame_no
 
@@ -42,6 +43,12 @@ class Camera(nn.Module):
         self.gt_alpha_mask = gt_alpha_mask
         self.img_wh = img_wh
         self.image_path = image_path
+        self.talking_dict=talking_dict
+        
+        if background is not None:
+          self.background = background
+        else:
+          self.background = None
         
         try:
             self.data_device = torch.device(data_device)
