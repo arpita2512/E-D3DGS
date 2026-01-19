@@ -20,7 +20,7 @@ import os
 WARNED = False
 from PIL import Image
 
-def loadCam(args, id, cam_info, resolution_scale):
+def loadCam(args, id, cam_info, resolution_scale, load_bg=False):
     imgg = Image.open(cam_info.image_path)
     
     orig_w, orig_h = imgg.size
@@ -49,10 +49,9 @@ def loadCam(args, id, cam_info, resolution_scale):
     gt_image = imgg[:3, ...]
     loaded_mask = None
     
-    if cam_info.background_path is not None:
-      background = Image.open(cam_info.background_path).convert("RGB")
+    if cam_info.background_path is not None and load_bg:
+      background = Image.open(cam_info.background_path)
       background = PILtoTorch(background, resolution)
-      background = background[:3, ...]
     else:
       background = None
 
@@ -325,12 +324,12 @@ def loadCamnogt(args, id, cam_info, resolution_scale):
                   image=resolution, gt_alpha_mask=loaded_mask,
                   image_name=cam_info.image_name, uid=id, data_device=args.data_device, near=cam_info.near, far=cam_info.far, timestamp=cam_info.timestamp, rayo=rays_o, rayd=rays_d)
 
-def cameraList_from_camInfos(cam_infos, resolution_scale, args):
+def cameraList_from_camInfos(cam_infos, resolution_scale, args, load_bg=False):
     
     camera_list = []
 
     for id, c in enumerate(cam_infos):
-        camera_list.append(loadCam(args, id, c, resolution_scale))
+        camera_list.append(loadCam(args, id, c, resolution_scale, load_bg))
     
     return camera_list
 

@@ -472,16 +472,16 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     #duration = len(img_names)
     
     # subset for testing -  NEED TO CHANGE
-    #img_names = img_names[:100]
+    #img_names = img_names[:500]
     #cam_extrinsics_subset = sorted(cam_extrinsics.items(), key=lambda x: x[1].name)
-    #cam_extrinsics_subset = cam_extrinsics_subset[:100]
+    #cam_extrinsics_subset = cam_extrinsics_subset[:500]
     
     #cam_extrinsics = {}
     #for key, value in cam_extrinsics_subset:
     #  cam_extrinsics[key] = value
     ############
     
-    aud_file = np.load(f"{path}/audio_features/aud_hu.npy")  #CHANGED FOR SINGLE VID
+    aud_file = np.load(f"{path}/aud_hu.npy")  #CHANGED FOR SINGLE VID
     aud_file = torch.from_numpy(aud_file)
     aud_file = aud_file.float().permute(0, 2, 1)
     
@@ -509,7 +509,7 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     ldmks_mouth = []
     ldmks_lhalf = []
     
-    for idx, frame in tqdm(enumerate(img_names)):
+    for idx, frame in tqdm(enumerate(sorted(os.listdir(images_folder)))): ## CHANGED BY START NUMBER 0/1
             lms = np.loadtxt(os.path.join(path, 'images', frame[:-4] + '.lms')) # [68, 2]
             lips = slice(48, 60)
             mouth = slice(60, 68)
@@ -567,9 +567,8 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
         # load bg image
         background_path = f"{path}/torso_imgs/{image_name[:-4]}.png"
         
-        #video = image_name[:3] CHANGED FOR SINGLE VID
-        frame = image_name[:-4] # image_name[4:-4] CHANGED FOR SINGLE VID
-        idx_frame = int(frame.lstrip("0")) - 1
+        frame = image_name[:-4] 
+        idx_frame = int(frame.lstrip("0")) - 1  ## CHANGED BY START NUMBER 0/1
         
         aud_feats = get_audio_features(aud_file, 2, idx_frame).numpy()
         #print("Aud shape: ")
@@ -643,9 +642,9 @@ def readColmapSceneInfoAudio(path, images, ply_name="points3D_downsample.ply"):
     
     cam_infos = sorted(cam_infos_unsorted, key = lambda x : x.image_name)
     
-    split_idx = 8132
+    split_idx = round(len(cam_infos) * 10 / 11)
     
-    train_cam_infos =cam_infos[:split_idx] 
+    train_cam_infos = cam_infos[:split_idx] 
     test_cam_infos = cam_infos[split_idx:]
     
     #for c in cam_infos:

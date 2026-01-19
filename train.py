@@ -32,6 +32,9 @@ to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
 import torchvision
 import lpips
 
+from utils.general_utils import PILtoTorch
+from PIL import Image
+
 # import lpips
 from utils.scene_utils import render_training_image
 from time import time
@@ -45,7 +48,8 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
     first_iter = 0
     
     opt.densify_until_iter = opt.iterations - 1000
-    lpips_start_iter = 0 # opt.densify_until_iter - 2000   
+    lpips_start_iter = 0 # opt.densify_until_iter - 2000  
+    
     
     gaussians.training_setup(opt)
     
@@ -57,9 +61,9 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
 
-    bg_color = [0, 1, 0] #if dataset.white_background else [0, 0, 0]
-    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
+    #bg_color = [0, 1, 0] #if dataset.white_background else [0, 0, 0]
+    #background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
 
@@ -166,39 +170,49 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             cam_no_list.append(cam_no)
             frame_no_list.append(frame_no)
             
-            ## Render with green bg
+            
+            # Real bg
+            head_mask = torch.as_tensor(viewpoint_cam.talking_dict['face_mask'] + viewpoint_cam. talking_dict['hair_mask'] + viewpoint_cam.talking_dict['mouth_mask']).cuda()
+            torso_mask = torch.as_tensor(viewpoint_cam.talking_dict['torso_mask']).cuda()
+            
+            # black or white
+            white_or_black = torch.randint(2, (1,)).item()
+            bg_color = torch.full((3,), white_or_black, dtype=torch.float32, device="cuda")
+            background = bg_color[:, None, None] * torch.ones((1, viewpoint_cam.image_height, viewpoint_cam.image_width), device=bg_color.device)
+            
+            ## Render
             render_pkg = render(viewpoint_cam, gaussians, pipe, background, cam_no=cam_no, iter=iteration, \
                 num_down_emb_c=hyper.min_embeddings, num_down_emb_f=hyper.min_embeddings)
             
             image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             
             # new stuff for bg
-            head_mask = torch.as_tensor(viewpoint_cam.talking_dict['face_mask'] + viewpoint_cam. talking_dict['hair_mask'] + viewpoint_cam.talking_dict['mouth_mask']).cuda()
             
             #head_torso_mask = torch.as_tensor(viewpoint_cam.talking_dict['face_mask'] + viewpoint_cam.talking_dict['hair_mask'] + viewpoint_cam. talking_dict['mouth_mask'] \
             # + viewpoint_cam.talking_dict['torso_mask'] + viewpoint_cam.talking_dict['neck_mask']).cuda()
-
+            
+            #image = image - background[:, None, None] * ~head_mask + real_bg * ~head_torso_mask + viewpoint_cam.background.cuda() * ~head_mask
+            ####
+            
             images.append(image.unsqueeze(0)) 
             gt_image = viewpoint_cam.original_image.cuda()
             
-            gt_image_white = gt_image * head_mask + background[:, None, None] * ~head_mask
+            gt_image_white = gt_image * head_mask + background * ~head_mask
             
             # LIPS
             
-            '''
             if iteration > lpips_start_iter:
               image_t = image.clone()
               gt_image_t = gt_image_white.clone()
               
               [xmin, xmax, ymin, ymax] = viewpoint_cam.talking_dict['lips_rect']
               
-              lip_img = image_t.clone()[:, xmin:xmax, ymin:ymax] #* 2 - 1
-              gt_lip_img = gt_image_t.clone()[:, xmin:xmax, ymin:ymax] #* 2 - 1
+              lip_img = image_t.clone()[:, xmin:xmax, ymin:ymax] * 2 - 1
+              gt_lip_img = gt_image_t.clone()[:, xmin:xmax, ymin:ymax] * 2 - 1
               
               lip_imgs.append(lip_img.unsqueeze(0))
               gt_lip_imgs.append(gt_lip_img.unsqueeze(0))
-            '''
-            
+
             # Lips END
             
             #print(iteration, viewpoint_cam.image_name)
@@ -239,12 +253,12 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
             })
 
         psnr_ = psnr(image_tensor, gt_image_tensor).mean().double()
-        for i in range(len(Ll1_items)):
+        #for i in range(len(Ll1_items)):
             #print("\n\nloss list", loss_list)
             #print("\n\ncam_no_list", cam_no_list)
             #print("\n\nframe_no_list", frame_no_list)
             #print("\n\nLl1_items", Ll1_items)
-            loss_list[cam_no_list[i], frame_no_list[i]] = Ll1_items[i].item()
+            #loss_list[cam_no_list[i], frame_no_list[i]] = Ll1_items[i].item()
 
         # use l1 instead of opacity reset
         if opt.opacity_l1_coef_fine > 0. : # and iteration < opt.densify_until_iter:
@@ -280,24 +294,20 @@ def scene_reconstruction(dataset, opt, hyper, pipe, testing_iterations, saving_i
                 'loss_smooth_reg_temporal': opt.coef_tv_temporal_embedding * torch.square(second_difference).mean(),
             })
         
-        ''' # loss based on consecutive image frames
-        # smoothness reg on temporal embeddings
-        if opt.coef_tv_temporal_embedding > 0:
-            bs_img, c_img, h_img, w_img = image_tensor.size()
-            tv_h = torch.pow(image_tensor[:,:,1:,:]-image_tensor[:,:,:-1,:], 2).sum()
-            tv_w = torch.pow(image_tensor[:,:,:,1:]-image_tensor[:,:,:,:-1], 2).sum()
-            loss += opt.coef_tv_temporal_embedding * (tv_h+tv_w)/(bs_img*c_img*h_img*w_img)
-            wandb.log({
-                'tv_loss': opt.coef_tv_temporal_embedding * (tv_h+tv_w)/(bs_img*c_img*h_img*w_img),
-            })
-        '''
-        
-        # lip loss
+        # lpips loss
         
         if iteration > lpips_start_iter:
-          loss += 0.01 * lpips_criterion(image_tensor, gt_image_tensor).mean()
+          #patch_size = random.randint(32, 48) * 2
+          
+          loss += 0.01 * lpips_criterion(image_tensor * 2 - 1 , gt_image_tensor * 2 - 1).mean()
           wandb.log({
-              'lpips': 0.01 * lpips_criterion(image_tensor, gt_image_tensor).mean(),
+              'lpips': 0.01 * lpips_criterion(image_tensor * 2 - 1, gt_image_tensor * 2 - 1).mean(),
+          })
+          
+          lip_loss = 0.002 * ( lpips_criterion(lip_imgs[0], gt_lip_imgs[0]).mean() + lpips_criterion(lip_imgs[1], gt_lip_imgs[1]).mean() ) / 2
+          loss += lip_loss
+          wandb.log({
+              'lpips lips': lip_loss,
           })
           
         

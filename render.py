@@ -30,7 +30,7 @@ from utils.general_utils import PILtoTorch
 from PIL import Image
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, hyperparam=None):
+def render_set(model_path, name, iteration, views, gaussians, pipeline, hyperparam=None, bg_path=None):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -47,7 +47,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     count = 0
     total_time = 0
     
-    real_bg = PILtoTorch(Image.open("/mnt/scratch/scasag/tmay/bc.jpg").convert("RGB"), None).cuda()
+    real_bg = PILtoTorch(Image.open(bg_path).convert("RGB"), None).cuda()
     
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         if type(view.original_image) == type(None):
@@ -57,13 +57,13 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                 view.load_image()
         time1 = time()
         
+        torso = view.background.cuda()
+        
+        background = real_bg * ~torso[3,:,:].to(torch.bool) + torso[:3,:,:]
+        
         rendering = render(view, gaussians, pipeline, background, iter=iteration, num_down_emb_c=num_down_emb_c, num_down_emb_f=num_down_emb_f)["render"]
         
-        head_mask = torch.as_tensor(view.talking_dict['face_mask'] + view.talking_dict['hair_mask'] + view.talking_dict['mouth_mask']).cuda()
-        
-        head_torso_mask = torch.as_tensor(view.talking_dict['face_mask'] + view.talking_dict['hair_mask'] + view.talking_dict['mouth_mask'] + view.talking_dict['torso_mask'] + view.talking_dict['neck_mask']).cuda()
-        
-        render_with_bg = rendering - background[:, None, None] * ~head_mask + real_bg * ~head_torso_mask + view.background.cuda() * ~head_mask
+        render_with_bg = rendering
         
         time2 = time()
         total_time += (time2 - time1)
@@ -95,20 +95,20 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     #imageio.mimwrite(os.path.join(model_path, name, "ours_{}".format(iteration), 'video_rgb.mp4'), render_images, fps=30, quality=8)
 
 
-def render_sets(dataset : ModelParams, hyperparam, opt, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, skip_video: bool):
+def render_sets(dataset : ModelParams, hyperparam, opt, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, skip_video: bool, bg_path):
     with torch.no_grad():
         gaussians = GaussianModel(dataset.sh_degree, hyperparam)
-        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False, duration=None, loader=dataset.loader, opt=opt)
+        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False, duration=None, loader=dataset.loader, opt=opt, load_bg=True)
 
-        bg_color = [0,1,0] #if dataset.white_background else [0, 0, 0]
-        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+        #bg_color = [0,1,0] #if dataset.white_background else [0, 0, 0]
+        #background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-            render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, hyperparam=hyperparam)
+            render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, hyperparam=hyperparam, bg_path=bg_path)
         if not skip_test:
-            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, hyperparam=hyperparam)
+            render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, hyperparam=hyperparam, bg_path=bg_path)
         if not skip_video:
-            render_set(dataset.model_path, "video", scene.loaded_iter, scene.getVideoCameras(), gaussians, pipeline, background, hyperparam=hyperparam)
+            render_set(dataset.model_path, "video", scene.loaded_iter, scene.getVideoCameras(), gaussians, pipeline, hyperparam=hyperparam, bg_path=bg_path)
         
         
 
@@ -126,6 +126,7 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--configs", type=str)
+    parser.add_argument("--bg_path", type=str, default = None)
     
     # import sys
     # args = parser.parse_args(sys.argv[1:])
@@ -139,5 +140,5 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), hyperparam.extract(args), opt.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.skip_video)
+    render_sets(model.extract(args), hyperparam.extract(args), opt.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.skip_video, args.bg_path)
     # CUDA_VISIBLE_DEVICES=2 python render.py --model_path output/dynerf/coffee_martini_wo_cam13 --skip_train --configs arguments/dynerf/coffee_martini_wo_cam13.py

@@ -38,12 +38,12 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         campos=viewpoint_camera.camera_center.cuda(),
         prefiltered=False,
         debug=pipe.debug,
-        antialiasing=pipe.antialiasing,
+        #antialiasing=pipe.antialiasing,
     )
     
     aud = torch.from_numpy(viewpoint_camera.aud).to(means3D.device)#.repeat(means3D.shape[0],1)
     
-    exp_feat = viewpoint_camera.talking_dict['au_exp'].to(means3D.device).repeat(means3D.shape[0],1)
+    exp_feat = viewpoint_camera.talking_dict['au_exp'].to(means3D.device)#.repeat(means3D.shape[0],1)
     #print("exp_feat shape: ", exp_feat.shape)
     time = None#torch.tensor(viewpoint_camera.time).to(means3D.device).repeat(means3D.shape[0],1)
   

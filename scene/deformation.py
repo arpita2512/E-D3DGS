@@ -11,6 +11,31 @@ import torch.nn.functional as F
 from torch.utils.cpp_extension import load
 import torch.nn.init as init
 
+### MLP
+
+class MLP(nn.Module):
+    def __init__(self, dim_in, dim_out, dim_hidden, num_layers):
+        super().__init__()
+        self.dim_in = dim_in
+        self.dim_out = dim_out
+        self.dim_hidden = dim_hidden
+        self.num_layers = num_layers
+
+        net = []
+        for l in range(num_layers):
+            net.append(nn.Linear(self.dim_in if l == 0 else self.dim_hidden, self.dim_out if l == num_layers - 1 else self.dim_hidden, bias=False))
+
+        self.net = nn.ModuleList(net)
+    
+    def forward(self, x):
+        for l in range(self.num_layers):
+            x = self.net[l](x)
+            if l != self.num_layers - 1:
+                x = F.relu(x, inplace=True)
+                # x = F.dropout(x, p=0.1, training=self.training)
+                
+        return x
+
 #### audionet
 
 # Audio feature extractor
@@ -149,7 +174,8 @@ class deform_network(nn.Module):
         self.feature_out_f, self.pos_deform_f, self.scales_deform_f, self.rotations_deform_f, self.opacity_deform_f, self.rgb_deform_f = self.create_net()
         
         ####
-        self.g_emb_posenc_fn, self.g_emb_posenc_outdim = get_embedder(4, self.gaussian_embedding_dim)
+        self.g_emb_posenc_fn, self.g_emb_posenc_outdim = get_embedder(args.emb_posenc_L, self.gaussian_embedding_dim)         
+        self.exp_posenc_fn, self.exp_posenc_outdim = get_embedder(args.exp_posenc_L, self.exp_dim)
         ####
         
         ####
@@ -157,6 +183,17 @@ class deform_network(nn.Module):
         self.audio_dim = 64
         self.audio_net = AudioNet(self.audio_in_dim, self.audio_dim)
         self.audio_att_net = AudioAttNet(self.audio_dim)
+        
+        
+        self.exp_in_dim = 5
+        self.eye_dim = 6
+        self.exp_encode_net = MLP(self.exp_in_dim, self.eye_dim - 1, 16, 2)
+        
+        self.in_dim = self.gaussian_embedding_dim * (2*args.emb_posenc_L+1)
+        self.eye_att_net = MLP(self.in_dim, self.eye_dim, 16, 2)
+        self.aud_ch_att_net = MLP(self.in_dim, self.audio_dim, 32, 2)
+        
+        
         ####
 
         if args.zero_temporal:
@@ -180,7 +217,7 @@ class deform_network(nn.Module):
     ####    
     
     def create_net(self):
-        self.feature_out = [nn.Linear(self.aud_embedding_dim + self.gaussian_embedding_dim*9 + self.exp_dim, self.W)]  #### CHANGED: for L=6, emb_size*13=416;
+        self.feature_out = [nn.Linear(self.aud_embedding_dim + self.gaussian_embedding_dim * (2*self.args.emb_posenc_L+1) + self.exp_dim * (2*self.args.exp_posenc_L+1), self.W)]  #### CHANGED: for L=6, emb_size*13=416;
         
         for i in range(self.D-1):
             self.feature_out.append(nn.ReLU())
@@ -230,16 +267,30 @@ class deform_network(nn.Module):
                 h = t
     
         '''
-        aud = self.encode_audio(aud)
-        aud = aud.repeat(pts.shape[0],1) # n_gaussians * 6144
+        enc_a = self.encode_audio(aud)
+        enc_a = enc_a.repeat(pts.shape[0],1) # n_gaussians * 6144
         
         if type(pc) == type(None):
             embeddings = self.g_emb_posenc_fn(embeddings)
-            h = torch.cat([aud, embeddings, exp_feat], dim=-1)
         else:        
             embeddings = self.g_emb_posenc_fn(pc.get_embedding)
-            h = torch.cat([aud, embeddings, exp_feat], dim=-1)
+        
+        aud_ch_att = self.aud_ch_att_net(embeddings) 
+        enc_w = enc_a * aud_ch_att
+        
+        #exp_feat = exp_feat.repeat(pts.shape[0],1)
+        
+        eye_att = torch.relu(self.eye_att_net(embeddings)) 
+        enc_e = self.exp_encode_net(exp_feat[:-1])
+        enc_e = torch.cat([enc_e, exp_feat[-1:]], dim=-1)
+        enc_e = enc_e.repeat(pts.shape[0],1)
+        enc_e = enc_e * eye_att
+            
+        enc_e = self.exp_posenc_fn(enc_e)
+        
+        h = torch.cat([enc_w, embeddings, enc_e], dim=-1)
 
+        #h = torch.cat([aud, embeddings, exp_feat], dim=-1)
         h = feature_out(h)
         #print("hidden size: ", h.shape)
         return h

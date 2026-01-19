@@ -23,7 +23,7 @@ import torch
 
 
 class Scene:
-    def __init__(self, args : ModelParams, gaussians, load_iteration=None, shuffle=False, duration=None, loader=None, testonly=None, opt=None, ply_name="points3D_downsample.ply"):
+    def __init__(self, args : ModelParams, gaussians, load_iteration=None, shuffle=False, duration=None, loader=None, testonly=None, opt=None, ply_name="points3D_downsample.ply", load_bg=False):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -93,7 +93,7 @@ class Scene:
             elif loader == "colmap":
                 self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             elif loader == "colmapAudio":
-                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
+                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args, load_bg)
             else: 
                 self.train_cameras[resolution_scale] = cameraList_from_camInfosv2(scene_info.train_cameras, resolution_scale, args)
             
@@ -104,7 +104,7 @@ class Scene:
             elif loader == "colmap":
                 self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
             elif loader == "colmapAudio":
-                self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
+                self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args, load_bg)
             elif loader in ["nerfies"]:
                 self.test_cameras[resolution_scale] = cameraList_from_camInfosHyper(scene_info.test_cameras, resolution_scale, args)
 
@@ -114,7 +114,7 @@ class Scene:
             elif loader == "colmap":
                 self.video_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.video_cameras, resolution_scale, args)
             elif loader == "colmapAudio":
-                self.video_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.video_cameras, resolution_scale, args)
+                self.video_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.video_cameras, resolution_scale, args, load_bg)
             elif loader in ["nerfies"]:
                 self.video_cameras[resolution_scale] = cameraList_from_camInfosHyper(scene_info.video_cameras, resolution_scale, args)
 

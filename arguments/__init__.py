@@ -96,6 +96,10 @@ class ModelHiddenParams(ParamGroup):
         self.deform_from_iter=0
         self.use_anneal=True
         self.zero_temporal=False
+        
+        self.emb_posenc_L = 4
+        self.exp_posenc_L = 1
+        
         super().__init__(parser, "ModelHiddenParams")
         
 class OptimizationParams(ParamGroup):
