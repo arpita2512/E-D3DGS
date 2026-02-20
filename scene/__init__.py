@@ -93,7 +93,7 @@ class Scene:
             elif loader == "colmap":
                 self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             elif loader == "colmapAudio":
-                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args, load_bg)
+                self.train_cameras[resolution_scale] = []#cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args, load_bg)
             else: 
                 self.train_cameras[resolution_scale] = cameraList_from_camInfosv2(scene_info.train_cameras, resolution_scale, args)
             

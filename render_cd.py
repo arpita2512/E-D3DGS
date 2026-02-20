@@ -25,6 +25,7 @@ from arguments import ModelParams, PipelineParams, OptimizationParams, get_combi
 from gaussian_renderer import GaussianModel
 from time import time
 to8b = lambda x : (255*np.clip(x.cpu().numpy(),0,1)).astype(np.uint8)
+from pathlib import Path
 
 from utils.general_utils import PILtoTorch
 from PIL import Image
@@ -66,7 +67,8 @@ def get_audio_features(features, att_mode, index):
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, hyperparam=None, aud_path=None, bg_path=None):
     
-    render_path = os.path.join(model_path, name, "custom_{}".format(iteration), "renders")
+    aud_name = Path(aud_path).parts[-1][:-4]
+    render_path = os.path.join(model_path, name, "custom_{}".format(aud_name), "renders")
     
     aud_file = np.load(f"{aud_path}")
     aud_file = torch.from_numpy(aud_file)

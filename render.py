@@ -77,7 +77,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, hyperpar
             gt_list.append(gt)
         count +=1
         
-    print("FPS:",(len(views)-1)/total_time)
+    print("FPS:",(len(views))/total_time)
     
     # count = 0
     # print("writing training images.")

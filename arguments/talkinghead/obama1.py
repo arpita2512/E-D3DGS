@@ -22,7 +22,7 @@ ModelHiddenParams = dict(
     total_num_frames = None,
     
     emb_posenc_L = 4,
-    exp_posenc_L = 1,
+    exp_posenc_L = 0, #1,
 )
 
 OptimizationParams = dict(

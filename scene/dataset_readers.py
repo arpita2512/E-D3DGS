@@ -509,7 +509,7 @@ def readColmapCamerasAudio(path, cam_extrinsics, cam_intrinsics, images_folder):
     ldmks_mouth = []
     ldmks_lhalf = []
     
-    for idx, frame in tqdm(enumerate(sorted(os.listdir(images_folder)))): ## CHANGED BY START NUMBER 0/1
+    for idx, frame in tqdm(enumerate(sorted(os.listdir(images_folder)))): 
             lms = np.loadtxt(os.path.join(path, 'images', frame[:-4] + '.lms')) # [68, 2]
             lips = slice(48, 60)
             mouth = slice(60, 68)

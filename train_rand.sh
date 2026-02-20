@@ -26,11 +26,11 @@
 
 # TRAIN CMD
 
-WANDB_DISABLE_SERVICE=True numactl --interleave=1-3 python train_rand.py -s "/mnt/scratch/scasag/rand/" --configs "/users/scasag/E-D3DGS_bg/arguments/talkinghead/rand.py" --model_path "/mnt/scratch/scasag/rand_finalL2/" --expname "rand_finalL2" --images "gt_imgs" #-r 2
+WANDB_DISABLE_SERVICE=True numactl --interleave=1-3 python train_rand.py -s "/mnt/scratch/scasag/rand/" --configs "/users/scasag/E-D3DGS_bg/arguments/talkinghead/rand.py" --model_path "/mnt/scratch/scasag/rand_L0/" --expname "rand_L0" --images "gt_imgs" #-r 2
 
 # RENDER CMD
 
-numactl --interleave=1-3 python render.py --model_path "/mnt/scratch/scasag/rand_finalL2/"  --skip_video --skip_train --configs "/users/scasag/E-D3DGS_bg/arguments/talkinghead/rand.py" --images "gt_imgs" --bg_path "/mnt/scratch/scasag/rand/bc.jpg" #--iteration 20000
+numactl --interleave=1-3 python render.py --model_path "/mnt/scratch/scasag/rand_L0/"  --skip_video --skip_train --configs "/users/scasag/E-D3DGS_bg/arguments/talkinghead/rand.py" --images "gt_imgs" --bg_path "/mnt/scratch/scasag/rand/bc.jpg" #--iteration 20000
 
 # metrics
 
